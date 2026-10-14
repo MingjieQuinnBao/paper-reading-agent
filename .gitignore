@@ -1,0 +1,17 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+api_key.txt
+
+# User content and generated application state
+agent_system/inputs/
+agent_system/logs/
+agent_system/results/
+agent_system/sessions/
+
+# Course archives and exports
+*.zip
