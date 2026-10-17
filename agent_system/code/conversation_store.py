@@ -66,10 +66,27 @@ def recent(root: Path, limit: int = 30) -> list[dict[str, Any]]:
     sessions = []
     for path in folder.glob("*.json"):
         try:
-            sessions.append(load(root, path.stem))
+            session = load(root, path.stem)
+            if session.get("turns") or session.get("paper_source") or session.get("title_custom"):
+                sessions.append(session)
         except (ValueError, OSError, json.JSONDecodeError):
             continue
     return sorted(sessions, key=lambda row: row.get("updated_at", ""), reverse=True)[:limit]
+
+
+def discard_unused(root: Path, session_id: str) -> bool:
+    """Remove an abandoned draft without touching conversations with user content."""
+    if not ID_PATTERN.fullmatch(session_id):
+        return False
+    with _LOCK:
+        try:
+            session = load(root, session_id)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError):
+            return False
+        if session.get("turns") or session.get("paper_source") or session.get("title_custom"):
+            return False
+        _path(root, session_id).unlink()
+        return True
 
 
 def set_paper(root: Path, session_id: str, paper_source: str) -> dict[str, Any]:
@@ -139,6 +156,10 @@ def import_record(root: Path, record: Any, paper_source: str) -> dict[str, Any]:
             "evidence": item.get("evidence") if isinstance(item.get("evidence"), list) else [],
             "annotations": [str(label)[:80] for label in item.get("annotations", [])[:10]]
             if isinstance(item.get("annotations"), list) else [],
+            "process": [
+                {key: str(value)[:120] for key, value in step.items() if key in {"key", "pages", "position", "model"}}
+                for step in item.get("process", [])[:80] if isinstance(step, dict)
+            ] if isinstance(item.get("process"), list) else [],
         })
     session = create(root, paper_source)
     with _LOCK:

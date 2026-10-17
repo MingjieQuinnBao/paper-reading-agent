@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>论文阅读 Agent</title>
+  <link rel="stylesheet" href="/static/chat.css">
+  <link rel="stylesheet" href="/static/katex/katex.min.css">
+  <script src="/static/katex/katex.min.js" defer></script>
+  <script src="/static/katex/auto-render.min.js" defer></script>
+  <script src="/static/settings.js" defer></script>
+  <script src="/static/markdown.js" defer></script>
+  <script src="/static/chat.js" defer></script>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar" aria-label="对话侧栏">
+    <div class="sidebar-top">
+      <strong class="brand" data-i18n="brand">论文阅读 Agent</strong>
+      <button class="icon-button" id="search-toggle" type="button" aria-label="搜索对话" data-i18n-aria="searchChats" aria-controls="sidebar-search" aria-expanded="false" title="搜索对话" data-i18n-title="searchChats">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 5 5"/></svg>
+      </button>
+      <button class="icon-button" id="sidebar-hide" type="button" aria-label="隐藏侧栏" data-i18n-aria="hideSidebar" title="隐藏侧栏" data-i18n-title="hideSidebar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.5"/><path d="M8.5 3.5v17"/></svg>
+      </button>
+    </div>
+    <form class="sidebar-search" id="sidebar-search" method="get" action="/" hidden>
+      <input type="hidden" name="session" value="{session_id}">
+      <input name="search" value="{search}" placeholder="搜索问题、回答或轮次" data-i18n-placeholder="searchPlaceholder" aria-label="搜索问题、回答或轮次" data-i18n-aria="searchPlaceholder">
+      <button class="search-submit" type="submit" data-i18n="search">搜索</button>{clear_search}
+    </form>
+    <form method="post" action="/new"><button class="new-chat" type="submit"><span aria-hidden="true">✎</span> <span data-i18n="newChat">新对话</span></button></form>
+    <div class="side-title" data-i18n="chatHistory">对话记录</div>
+    <nav class="session-list" aria-label="对话记录" data-i18n-aria="chatHistory">{sessions}</nav>
+    <form class="import-form" method="post" action="/import" enctype="multipart/form-data">
+      <label for="session_file" data-i18n="loadChatFile">加载对话文件</label>
+      <input id="session_file" type="file" name="session_file" accept=".json,application/json" required>
+      <button class="secondary" type="submit" data-i18n="loadAndContinue">加载并续聊</button>
+    </form>
+    <div class="sidebar-settings">
+      <button class="settings-trigger" id="settings-trigger" type="button" aria-controls="settings-panel" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 13.8 5l2.4-.2.7 2.4 2.2 1.2-1 2.3 1 2.3-2.2 1.2-.7 2.4-2.4-.2-1.8 1.8-1.8-1.8-2.4.2-.7-2.4-2.2-1.2 1-2.3-1-2.3 2.2-1.2.7-2.4 2.4.2L12 3.2Z"/><circle cx="12" cy="10.7" r="2.5"/></svg>
+        <span data-i18n="settings">设置</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-head">
+      <div class="head-left">
+        <button class="icon-button sidebar-show" id="sidebar-show" type="button" aria-label="显示侧栏" data-i18n-aria="showSidebar" title="显示侧栏" data-i18n-title="showSidebar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.5"/><path d="M8.5 3.5v17"/></svg>
+        </button>
+        <div><h1>{title}</h1><div class="sub">{paper_status}</div></div>
+      </div>
+      <a class="export-link" href="/export?session={session_id}" data-i18n="exportChat">导出对话</a>
+    </header>
+
+    <div class="content" id="chat-content" aria-live="polite">{error}<div class="messages" id="messages">{messages}</div></div>
+
+    <div class="composer-wrap">
+      <form class="composer" id="composer" method="post" action="/ask" enctype="multipart/form-data">
+        <input type="hidden" name="session_id" value="{session_id}">
+        <div class="tools-menu" id="tools-menu" hidden>
+          <div class="tools-menu-title" data-i18n="addToChat">添加到对话</div>
+          <button class="tool-action" type="button" data-tool="paper" aria-expanded="false">📄 <span data-i18n="{paper_summary_key}">{paper_summary}</span></button>
+          <section class="tool-section" data-tool-section="paper" hidden>
+            <label for="paper_file" data-i18n="importFile">导入 PDF、Markdown 或文本</label>
+            <input id="paper_file" name="paper_file" type="file" accept=".pdf,.md,.txt">
+            <div class="or" data-i18n="orPaste">或粘贴正文</div>
+            <textarea id="paper_text" name="paper_text" placeholder="粘贴论文正文" data-i18n-placeholder="pastePaper">{paper_text}</textarea>
+          </section>
+          <button class="tool-action" type="button" data-tool="settings" aria-expanded="false">⚙ <span data-i18n="modelSettings">模型与参数设置</span></button>
+          <section class="tool-section" data-tool-section="settings" hidden>
+            <label for="model_choice" data-i18n="model">模型</label>
+            <select id="model_choice" name="model_choice">{model_options}</select>
+            <div class="settings-grid">
+              <div><label for="temperature">temperature</label><input id="temperature" name="temperature" type="number" min="0" max="1.5" step="0.1" value="{temperature}"></div>
+              <div><label for="top_p">top_p</label><input id="top_p" name="top_p" type="number" min="0.1" max="1" step="0.05" value="{top_p}"></div>
+              <div><label for="max_tokens">max_tokens</label><input id="max_tokens" name="max_tokens" type="number" min="100" max="6000" step="100" value="{max_tokens}"></div>
+              <div><label for="evidence_limit" data-i18n="evidenceCount">证据数</label><input id="evidence_limit" name="evidence_limit" type="number" min="1" max="8" value="{evidence_limit}"></div>
+            </div>
+          </section>
+        </div>
+        <div class="composer-main">
+          <button class="plus-button" id="tools-toggle" type="button" aria-label="添加论文或调整参数" data-i18n-aria="addPaperOrSettings" aria-controls="tools-menu" aria-expanded="false" title="添加论文或调整参数" data-i18n-title="addPaperOrSettings">＋</button>
+          <textarea class="question" name="q" rows="1" placeholder="问这篇论文的任何问题…" data-i18n-placeholder="questionPlaceholder" aria-label="输入问题" data-i18n-aria="questionInput">{draft}</textarea>
+          <input id="research-mode" type="hidden" name="research_mode" value="paper">
+          <div class="mode-picker">
+            <button class="mode-toggle" id="mode-toggle" type="button" aria-controls="mode-panel" aria-expanded="false"><span id="mode-current" data-i18n="modePaper">論文閱讀</span><svg class="mode-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4 4.5-4"/></svg></button>
+            <div class="mode-panel" id="mode-panel" hidden>
+              <div class="mode-heading"><strong id="mode-heading" data-i18n="modePaper">論文閱讀</strong><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4 4.5-4 4.5"/></svg></div>
+              <input id="mode-slider" type="range" min="0" max="2" step="1" value="0" aria-label="搜尋模式" data-i18n-aria="modeLabel">
+              <div class="mode-stops"><span data-i18n="modePaperShort">論文</span><span data-i18n="modeQuickShort">快搜</span><span data-i18n="modeDeepShort">深研</span></div>
+              <p id="mode-description" data-i18n="modePaperDescription">依據已匯入論文回答</p>
+            </div>
+          </div>
+          <button class="send-button" name="action" value="ask" type="submit" aria-label="发送问题" data-i18n-aria="sendQuestion" title="发送问题" data-i18n-title="sendQuestion">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
+          </button>
+        </div>
+        <div id="submit_status" class="status" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </main>
+</div>
+<div class="settings-overlay" id="settings-overlay" hidden>
+  <section class="settings-dialog" id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-heading" tabindex="-1">
+    <header class="settings-heading"><h2 id="settings-heading" data-i18n="settings">設定</h2><button class="icon-button settings-close" id="settings-close" type="button" aria-label="關閉設定" data-i18n-aria="closeSettings">×</button></header>
+    <div class="settings-layout">
+      <nav class="settings-nav" role="tablist" aria-label="設定分類" data-i18n-aria="settingsCategories">
+        <button type="button" role="tab" id="settings-tab-general" data-settings-tab="general" aria-controls="settings-page-general" aria-selected="true" data-i18n="settingsGeneral">一般</button>
+        <button type="button" role="tab" id="settings-tab-appearance" data-settings-tab="appearance" aria-controls="settings-page-appearance" aria-selected="false" data-i18n="settingsAppearance">外觀</button>
+        <button type="button" role="tab" id="settings-tab-responses" data-settings-tab="responses" aria-controls="settings-page-responses" aria-selected="false" data-i18n="settingsResponses">回答</button>
+      </nav>
+      <div class="settings-pages">
+        <section id="settings-page-general" role="tabpanel" aria-labelledby="settings-tab-general" data-settings-page="general">
+          <h3 data-i18n="settingsGeneral">一般</h3>
+          <div class="setting-row"><label for="setting-language" data-i18n="interfaceLanguage">介面語言</label><select id="setting-language"><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="en">English</option></select></div>
+          <div class="setting-row"><label for="setting-send-mode" data-i18n="sendMode">傳送方式</label><select id="setting-send-mode"><option value="enter" data-i18n="sendWithEnter">Enter 傳送</option><option value="ctrl-enter" data-i18n="sendWithCtrlEnter">Ctrl+Enter 傳送</option></select></div>
+          <div class="setting-row"><label for="setting-auto-scroll" data-i18n="autoScroll">回答時自動捲動</label><input id="setting-auto-scroll" type="checkbox"></div>
+        </section>
+        <section id="settings-page-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance" data-settings-page="appearance" hidden>
+          <h3 data-i18n="settingsAppearance">外觀</h3>
+          <div class="setting-row"><label for="setting-theme" data-i18n="theme">外觀主題</label><select id="setting-theme"><option value="system" data-i18n="themeSystem">跟隨系統</option><option value="light" data-i18n="themeLight">淺色</option><option value="dark" data-i18n="themeDark">深色</option></select></div>
+          <div class="setting-row"><label for="setting-font-size" data-i18n="fontSize">文字大小</label><select id="setting-font-size"><option value="small" data-i18n="fontSmall">較小</option><option value="normal" data-i18n="fontNormal">標準</option><option value="large" data-i18n="fontLarge">較大</option></select></div>
+          <div class="setting-row"><label for="setting-reduce-motion" data-i18n="reduceMotion">減少動畫效果</label><input id="setting-reduce-motion" type="checkbox"></div>
+        </section>
+        <section id="settings-page-responses" role="tabpanel" aria-labelledby="settings-tab-responses" data-settings-page="responses" hidden>
+          <h3 data-i18n="settingsResponses">回答</h3>
+          <div class="setting-row"><label for="setting-stream-speed" data-i18n="streamSpeed">回答顯示速度</label><select id="setting-stream-speed"><option value="slow" data-i18n="streamSlow">慢速</option><option value="normal" data-i18n="streamNormal">標準</option><option value="instant" data-i18n="streamInstant">即時</option></select></div>
+          <div class="setting-row"><label for="setting-reasoning-expanded" data-i18n="reasoningExpanded">展開思考過程</label><input id="setting-reasoning-expanded" type="checkbox"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

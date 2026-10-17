@@ -6,6 +6,8 @@ venv/
 .env
 .env.*
 api_key.txt
+api_key_tavily.txt
+api_key_bocha.txt
 
 # User content and generated application state
 agent_system/inputs/

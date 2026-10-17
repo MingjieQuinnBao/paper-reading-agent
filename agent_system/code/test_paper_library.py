@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -70,6 +71,31 @@ class PaperLibraryTests(unittest.TestCase):
         self.assertEqual(result["trace"][2]["llm_input_coverage"], "chunked_full_text")
         self.assertEqual(len(agent_core.extract_call_chains()), 1)
 
+    def test_overview_keeps_appendix_evidence_and_retries_false_no_evidence(self) -> None:
+        source = agent_core.ingest_paper_bytes("overview.md", b"# Abstract\nResearch question.\n# Appendix\nImportant proof.")["source_id"]
+        prompts = []
+
+        def fake_llm(model, prompt, cfg, tag, system_prompt=""):
+            prompts.append((tag, prompt))
+            if tag.endswith("-part1"):
+                return "Main result and motivation (DOC SECTION 1). " * 8, {"actual_model": model, "status": 200}
+            if tag.endswith("-part2"):
+                return "本段无相关证据。附录不能讲解全文。", {"actual_model": model, "status": 200}
+            if tag.endswith("-part2-retry"):
+                return "Appendix proves the result (DOC SECTION 2).", {"actual_model": model, "status": 200}
+            return "Verified explanation.", {"actual_model": model, "status": 200}
+
+        cfg = agent_core.AgentConfig(model="deepseek-flash", route_mode="manual", paper_source=source)
+        with patch.object(agent_core, "paper_chunks", return_value=(
+            ["[DOC SECTION 1]\nResearch question.", "[DOC SECTION 2]\nImportant proof."], [1, 2],
+        )), patch.object(agent_core, "call_deepseek", side_effect=fake_llm):
+            result = agent_core.answer_question("講解此論文", cfg)
+        self.assertEqual(result["answer"], "Verified explanation.")
+        self.assertEqual(len(prompts), 4)
+        self.assertIn("Appendix proves the result", prompts[-1][1])
+        self.assertIn("不要判断整篇论文是否缺少其他章节", prompts[1][1])
+        self.assertIn("不要把某一段的局部视角误写成整篇论文", prompts[-1][1])
+
     def test_chunked_structured_reading_renders_in_chinese(self) -> None:
         source = agent_core.ingest_paper_bytes(
             "long.md", ("# Introduction\n" + "A" * 100000 + "\n# Results\nFINAL-EVIDENCE").encode(),
@@ -131,12 +157,12 @@ class PaperLibraryTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
         source = next(iter(json.loads((self.root / "inputs" / "catalog.json").read_text(encoding="utf-8"))))
-        self.assertIn("已导入 new", page)
+        self.assertIn("已导入 new", re.sub(r"<[^>]+>", "", page))
         self.assertIn(f"paper_source={source}", cookie)
         self.assertIn("copper tokens", page)
         self.assertIn("copper tokens", second_page)
         self.assertIn('href="/">返回阅读', logs_page)
-        self.assertIn("已导入 new", returned_page)
+        self.assertIn("已导入 new", re.sub(r"<[^>]+>", "", returned_page))
         self.assertNotIn("当前论文", returned_page)
         self.assertNotIn("执行失败", page)
 
